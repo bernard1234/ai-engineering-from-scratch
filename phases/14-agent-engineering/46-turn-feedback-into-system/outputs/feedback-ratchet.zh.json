@@ -1,0 +1,32 @@
+[
+  {
+    "target": "automation",
+    "rule": "防止隐式的环境假设",
+    "verification": "运行 setup 或工具的预检",
+    "fingerprint": "4583ddf9efe6",
+    "symptom": "Setup 命令失败",
+    "cause": "环境假设是隐式的",
+    "recurrence": 3,
+    "consequence": "会话丢失"
+  },
+  {
+    "target": "scope",
+    "rule": "防止未经检查的范围描述",
+    "verification": "运行范围检查器",
+    "fingerprint": "84a04b190176",
+    "symptom": "智能体编辑了无关文件",
+    "cause": "范围被描述了但没有被检查",
+    "recurrence": 2,
+    "consequence": "评审反复返工"
+  },
+  {
+    "target": "test",
+    "rule": "防止边界情况缺少可执行示例",
+    "verification": "运行新的回归测试",
+    "fingerprint": "a615a06d2823",
+    "symptom": "一次回归逃逸了",
+    "cause": "边界情况没有可执行示例",
+    "recurrence": 1,
+    "consequence": "用户可见的故障"
+  }
+]

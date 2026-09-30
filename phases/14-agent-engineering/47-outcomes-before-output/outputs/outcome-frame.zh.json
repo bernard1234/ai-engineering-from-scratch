@@ -1,0 +1,20 @@
+{
+  "status": "ready-to-discover",
+  "issues": [],
+  "frame": {
+    "user": "值班工程师",
+    "situation": "事故期间一条生产告警到达",
+    "current_behavior": "在找到受影响服务之前搜索三个仪表盘",
+    "desired_outcome": "在两分钟内识别出故障服务以及安全的下一步行动",
+    "constraints": [
+      "诊断期间只读",
+      "必须保留审计记录"
+    ],
+    "non_goals": [
+      "自动修复",
+      "替换事故指挥官"
+    ],
+    "proposed_output": "事故助手"
+  },
+  "next_question": "什么样的证据能表明值班工程师的期望成果已经达成？"
+}

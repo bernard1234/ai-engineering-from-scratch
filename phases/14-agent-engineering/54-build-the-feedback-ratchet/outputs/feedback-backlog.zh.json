@@ -1,0 +1,29 @@
+[
+  {
+    "priority": 12,
+    "destination": "context",
+    "change": "防止复发：缺失上下文导致了重复的服务查找",
+    "owner": "platform",
+    "durable_artifact": "context/retrieval-guidance.md",
+    "verification_evidence": "记录一次所需上下文在场的回放",
+    "retirement_check": "90 天无复发后移除或修订"
+  },
+  {
+    "priority": 12,
+    "destination": "evaluation",
+    "change": "防止复发：针对过期部署的误报",
+    "owner": "evaluation",
+    "durable_artifact": "evaluations/regression-suite.json",
+    "verification_evidence": "记录一次通过的回归评估",
+    "retirement_check": "60 天无复发后移除或修订"
+  },
+  {
+    "priority": 5,
+    "destination": "policy",
+    "change": "防止复发：尝试了一次生产写入",
+    "owner": "security",
+    "durable_artifact": "policies/authority-boundaries.json",
+    "verification_evidence": "记录一个通过的权限边界场景",
+    "retirement_check": "180 天无复发后移除或修订"
+  }
+]

@@ -1,0 +1,53 @@
+{
+  "status": "grounded",
+  "issues": [],
+  "direct_evidence_ratio": 0.67,
+  "friction_points": [
+    "查找负责人",
+    "切换上下文"
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "actor": "值班工程师",
+      "action": "打开告警",
+      "evidence": [
+        {
+          "source": "屏幕录制 01",
+          "observation": "告警缺少服务负责人",
+          "direct": true,
+          "confidence": 0.95
+        }
+      ],
+      "friction": "查找负责人"
+    },
+    {
+      "order": 2,
+      "actor": "值班工程师",
+      "action": "搜索仪表盘",
+      "evidence": [
+        {
+          "source": "事故 184",
+          "observation": "打开了三个仪表盘",
+          "direct": true,
+          "confidence": 0.9
+        }
+      ],
+      "friction": "切换上下文"
+    },
+    {
+      "order": 3,
+      "actor": "事故指挥官",
+      "action": "批准缓解措施",
+      "evidence": [
+        {
+          "source": "runbook",
+          "observation": "生产写入需要审批",
+          "direct": false,
+          "confidence": 0.8
+        }
+      ],
+      "friction": ""
+    }
+  ]
+}

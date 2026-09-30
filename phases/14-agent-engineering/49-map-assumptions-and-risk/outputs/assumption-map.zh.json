@@ -1,0 +1,32 @@
+[
+  {
+    "statement": "工程师能从告警上下文识别出正确的服务",
+    "impact": 5,
+    "uncertainty": 5,
+    "irreversibility": 2,
+    "test": "用只读原型回放十起事故",
+    "evidence": "",
+    "risk_score": 27,
+    "status": "open"
+  },
+  {
+    "statement": "自动修复是可接受的",
+    "impact": 5,
+    "uncertainty": 4,
+    "irreversibility": 5,
+    "test": "先不要自动化；先测试审批工作流",
+    "evidence": "",
+    "risk_score": 25,
+    "status": "open"
+  },
+  {
+    "statement": "两分钟诊断确实重要",
+    "impact": 4,
+    "uncertainty": 2,
+    "irreversibility": 1,
+    "test": "访谈五名事故指挥官",
+    "evidence": "五人中有四人确认",
+    "risk_score": 9,
+    "status": "tested"
+  }
+]

@@ -1,0 +1,57 @@
+[
+  {
+    "stage": "prototype",
+    "decision": {
+      "unknown": "能否从一条告警中识别出服务？",
+      "real_users_required": false,
+      "real_data_required": false,
+      "consequence": 2,
+      "reversible": true,
+      "operational_readiness": false
+    },
+    "required_controls": [
+      "合成或录制的输入",
+      "可丢弃的实现",
+      "学习问题"
+    ]
+  },
+  {
+    "stage": "pilot",
+    "decision": {
+      "unknown": "工程师会信任这个推荐吗？",
+      "real_users_required": true,
+      "real_data_required": true,
+      "consequence": 4,
+      "reversible": true,
+      "operational_readiness": false
+    },
+    "required_controls": [
+      "受限受众",
+      "回滚",
+      "人类负责人",
+      "审计记录",
+      "退出标准"
+    ]
+  },
+  {
+    "stage": "production",
+    "decision": {
+      "unknown": "该工作流能否满足它的 SLO？",
+      "real_users_required": true,
+      "real_data_required": true,
+      "consequence": 2,
+      "reversible": true,
+      "operational_readiness": true
+    },
+    "required_controls": [
+      "服务水平目标",
+      "值班负责人",
+      "安全审查",
+      "成本和容量控制",
+      "回滚",
+      "恢复",
+      "持续监控",
+      "退役路径"
+    ]
+  }
+]

@@ -1,0 +1,51 @@
+{
+  "status": "executable",
+  "issues": [],
+  "contract": {
+    "outcome": "在两分钟内从事故告警识别出受影响的服务",
+    "invariants": [
+      "诊断是只读的",
+      "每个来源都纳入审计记录"
+    ],
+    "examples": [
+      "一条带部署 id 的告警能够解析到它的服务负责人"
+    ],
+    "non_goals": [
+      "自动修复",
+      "更改告警路由"
+    ],
+    "decisions": [
+      {
+        "question": "应当先查询哪个只读数据源？",
+        "mode": "delegated",
+        "rationale": ""
+      },
+      {
+        "question": "系统可以写入生产环境吗？",
+        "mode": "locked",
+        "rationale": "生产权限保留在事故指挥官手中"
+      },
+      {
+        "question": "最多可以查询多少个来源？",
+        "mode": "bounded",
+        "rationale": "查询五个来源或两分钟后停止"
+      }
+    ],
+    "proof": [
+      "十次记录在案的事故回放",
+      "零次生产写入"
+    ]
+  },
+  "agent_may_decide": [
+    "应当先查询哪个只读数据源？"
+  ],
+  "bounded_decisions": [
+    {
+      "question": "最多可以查询多少个来源？",
+      "boundary": "查询五个来源或两分钟后停止"
+    }
+  ],
+  "human_checkpoint": [
+    "系统可以写入生产环境吗？"
+  ]
+}
