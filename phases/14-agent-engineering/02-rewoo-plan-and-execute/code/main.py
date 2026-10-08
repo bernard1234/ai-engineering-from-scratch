@@ -99,6 +99,36 @@ class ScriptedSolver:
         return self.template.format(**evidence)
 
 
+def needs_replan(evidence: dict[str, str]) -> bool:
+    """任一 worker 返回了错误字符串，就需要修订计划。"""
+    return any(v.startswith("error:") for v in evidence.values())
+
+
+class ScriptedReplanner:
+    """脚本化的 replanner（Plan-and-Execute 的增量部分）。
+
+    真实的 replanner 会把「带错误的观察」重新喂给 planner 生成修订计划。
+    这里用一条规则代替 LLM：把失败节点的工具替换成回退工具。
+    足够演示循环结构，而非真实重规划。
+    """
+
+    def __init__(self, fallback_tool: str) -> None:
+        self.fallback_tool = fallback_tool
+
+    def replan(self, question: str, plan: Plan,
+               evidence: dict[str, str]) -> Plan:
+        failed = [s.id for s in plan.steps
+                  if evidence.get(s.id, "").startswith("error:")]
+        print(f"  [replanner] 失败节点 {failed}; "
+              f"改用 {self.fallback_tool!r} 重试")
+        return Plan(steps=[
+            PlanStep(s.id,
+                     self.fallback_tool if s.id in failed else s.tool,
+                     s.args)
+            for s in plan.steps
+        ])
+
+
 def fake_search(query: str) -> str:
     if "capital of france" in query.lower():
         return "Paris"
@@ -125,6 +155,7 @@ class ReWOORun:
     planner_chars: int = 0
     worker_chars: int = 0
     solver_chars: int = 0
+    rounds: int = 1
 
 
 def run_rewoo(question: str, planner: ScriptedPlanner,
@@ -141,6 +172,29 @@ def run_rewoo(question: str, planner: ScriptedPlanner,
                     answer=answer,
                     planner_chars=planner_chars, worker_chars=worker_chars,
                     solver_chars=solver_chars)
+
+
+def run_plan_execute(question: str, planner: ScriptedPlanner,
+                     tools: ToolRegistry, solver: ScriptedSolver,
+                     replanner: ScriptedReplanner,
+                     max_rounds: int = 3) -> ReWOORun:
+    """ReWOO 加上 replanner：即 Plan-and-Execute。
+
+    先跑计划；只要任一 worker 报错，就把 evidence 送回 replanner 生成
+    修订计划再重跑。只有拿到无错误的 evidence（或重试预算耗尽）时才求解。
+    """
+    plan = planner.plan_for(question)
+    rounds = 0
+    evidence: dict[str, str] = {}
+    for _ in range(max_rounds):
+        rounds += 1
+        evidence = run_workers(plan, tools)
+        if not needs_replan(evidence):
+            break
+        plan = replanner.replan(question, plan, evidence)
+    answer = solver.solve(question, plan, evidence)
+    return ReWOORun(question=question, plan=plan, evidence=evidence,
+                    answer=answer, rounds=rounds)
 
 
 def run_react_mock(question: str, tools: ToolRegistry,
@@ -196,6 +250,30 @@ def main() -> None:
     print(f"  rewoo total  : {rewoo_chars}")
     print(f"  ratio        : {react_chars / max(rewoo_chars, 1):.2f}x")
     print("\npaper claim: ~5x fewer tokens on HotpotQA. toy approximates the shape.")
+
+    print("\n" + "=" * 70)
+    print("PLAN-AND-EXECUTE — replanner triggers on worker error")
+    print("=" * 70)
+
+    # 首份计划在 E2 用了不存在的工具，触发 replanner 修订。
+    bad_plan = Plan(steps=[
+        PlanStep("E1", "search", {"query": "capital of France"}),
+        PlanStep("E2", "lookup", {"query": "population of #E1"}),
+        PlanStep("E3", "round_million", {"text": "#E2"}),
+    ])
+    pe_planner = ScriptedPlanner(bad_plan)
+    replanner = ScriptedReplanner(fallback_tool="search")
+    pe_run = run_plan_execute("What is the population of the capital of France?",
+                              pe_planner, tools, solver, replanner)
+
+    print(f"\nrounds needed : {pe_run.rounds}")
+    print("final plan    :")
+    for step in pe_run.plan.steps:
+        print(f"  {step.id}: {step.tool}({step.args})")
+    print("evidence      :")
+    for k, v in pe_run.evidence.items():
+        print(f"  {k} -> {v}")
+    print(f"\nFINAL: {pe_run.answer}")
 
 
 if __name__ == "__main__":
