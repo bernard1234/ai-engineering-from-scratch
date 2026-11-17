@@ -26,8 +26,16 @@ class Vector:
         return self.dot(other) / (self.magnitude() * other.magnitude())
 
     def angle_between(self, other):
+        """Return the angle in degrees between nonzero vectors of equal dimension."""
         import math
+
+        if self.dim != other.dim:
+            raise ValueError("Vectors must have the same dimension")
+        if not any(self.components) or not any(other.components):
+            raise ValueError("The angle is undefined for a zero vector")
+
         cos_theta = self.cosine_similarity(other)
+        # Floating-point rounding can put the cosine just outside [-1, 1].
         cos_theta = max(-1.0, min(1.0, cos_theta))
         return math.degrees(math.acos(cos_theta))
 
