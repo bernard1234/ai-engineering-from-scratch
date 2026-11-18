@@ -121,13 +121,53 @@ naive-bayes
 
 ### MultinomialNB
 
-（fit / predict_log_proba / predict 的 Python 代码逐字保留）
+```python
+class MultinomialNB:
+    def __init__(self, alpha=1.0):
+        self.alpha = alpha
+
+    def fit(self, X, y):
+        classes = np.unique(y)
+        n_classes = len(classes)
+        n_features = X.shape[1]
+
+        self.classes_ = classes
+        self.class_log_prior_ = np.zeros(n_classes)
+        self.feature_log_prob_ = np.zeros((n_classes, n_features))
+
+        for i, c in enumerate(classes):
+            X_c = X[y == c]
+            self.class_log_prior_[i] = np.log(X_c.shape[0] / X.shape[0])
+            counts = X_c.sum(axis=0) + self.alpha
+            self.feature_log_prob_[i] = np.log(counts / counts.sum())
+
+        return self
+```
 
 关键洞察：拟合之后，预测就是矩阵乘法加偏置。这就是为什么朴素贝叶斯这么快。
 
 ### GaussianNB
 
-（每类每特征估计均值和方差的 Python 代码逐字保留）
+```python
+class GaussianNB:
+    def __init__(self):
+        pass
+
+    def fit(self, X, y):
+        classes = np.unique(y)
+        self.classes_ = classes
+        self.means_ = np.zeros((len(classes), X.shape[1]))
+        self.vars_ = np.zeros((len(classes), X.shape[1]))
+        self.priors_ = np.zeros(len(classes))
+
+        for i, c in enumerate(classes):
+            X_c = X[y == c]
+            self.means_[i] = X_c.mean(axis=0)
+            self.vars_[i] = X_c.var(axis=0) + 1e-9
+            self.priors_[i] = X_c.shape[0] / X.shape[0]
+
+        return self
+```
 
 ### Demo：文本分类
 
@@ -154,13 +194,32 @@ naive-bayes
 
 sklearn 里两种变体一行搞定：
 
-（sklearn GaussianNB / MultinomialNB 代码逐字保留）
+```python
+from sklearn.naive_bayes import GaussianNB, MultinomialNB
+
+gnb = GaussianNB()
+gnb.fit(X_train, y_train)
+print(f"GaussianNB accuracy: {gnb.score(X_test, y_test):.3f}")
+
+mnb = MultinomialNB(alpha=1.0)
+mnb.fit(X_train_counts, y_train)
+print(f"MultinomialNB accuracy: {mnb.score(X_test_counts, y_test):.3f}")
+```
 
 ### TF-IDF + 朴素贝叶斯
 
 原始词计数给每个出现的词相同权重。但 "the" 和 "is" 这样的常见词在每个类里都频繁出现——它们没有信息。TF-IDF 降权常见词、升权罕见的、有区分力的词。
 
-（TfidfVectorizer + MultinomialNB Pipeline 代码逐字保留）
+```python
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+
+text_clf = Pipeline([
+    ("tfidf", TfidfVectorizer()),
+    ("classifier", MultinomialNB(alpha=0.1)),
+])
+```
 
 TF-IDF 值非负，所以和 MultinomialNB 配合。TF-IDF + MultinomialNB 是文本分类最强的 baseline 之一。在少于 10000 训练样本的数据集上经常赢过更复杂的模型。
 
@@ -172,7 +231,15 @@ TF-IDF 值非负，所以和 MultinomialNB 配合。TF-IDF + MultinomialNB 是�
 
 NB 概率校准得不好。当 NB 说 P(垃圾)=0.95，真实概率可能 0.7。如果需要可靠的概率估计，用 sklearn 的 `CalibratedClassifierCV`：
 
-（CalibratedClassifierCV 代码逐字保留）
+```python
+from sklearn.calibration import CalibratedClassifierCV
+
+calibrated_nb = CalibratedClassifierCV(MultinomialNB(), cv=5, method="sigmoid")
+calibrated_nb.fit(X_train, y_train)
+proba = calibrated_nb.predict_proba(X_test)
+```
+
+这用交叉验证在 NB 的原始分数上拟合一个逻辑回归。得到的概率更接近真实类别频率。
 
 ### 常见陷阱
 

@@ -206,29 +206,94 @@ bias-variance
 
 用 `f(x) = sin(1.5x) + 0.5x` 加高斯噪声。知道真实函数让我们算精确的偏差和方差。
 
-（Python 代码逐字保留）
+```python
+def true_function(x):
+    return np.sin(1.5 * x) + 0.5 * x
+
+def generate_data(n_samples=30, noise_std=0.5, x_range=(-3, 3), seed=None):
+    rng = np.random.RandomState(seed)
+    x = rng.uniform(x_range[0], x_range[1], n_samples)
+    y = true_function(x) + rng.normal(0, noise_std, n_samples)
+    return x, y
+```
 
 ### 第 2 步：Bootstrap 采样和多项式拟合
 
 对每个多项式次数，我们抽很多 bootstrap 训练集，拟合多项式，然后在固定测试网格上记录预测。这给了我们每个测试点上的预测分布。
 
-（Python 代码逐字保留）
+```python
+def fit_polynomial(x_train, y_train, degree, lam=0.0):
+    X = np.column_stack([x_train ** d for d in range(degree + 1)])
+    if lam > 0:
+        penalty = lam * np.eye(X.shape[1])
+        penalty[0, 0] = 0
+        w = np.linalg.solve(X.T @ X + penalty, X.T @ y_train)
+    else:
+        w = np.linalg.lstsq(X, y_train, rcond=None)[0]
+    return w
+```
 
 ### 第 3 步：计算偏差² 和方差分解
 
 有了 200 组预测之后，我们能直接从定义计算分解：
 
-（Python 代码逐字保留）
+```python
+mean_pred = predictions.mean(axis=0)
+bias_sq = np.mean((mean_pred - y_true) ** 2)
+variance = np.mean(predictions.var(axis=0))
+total_error = np.mean(np.mean((predictions - y_true) ** 2, axis=1))
+```
+
+- `mean_pred` 是从 bootstrap 样本估计的 E[f_hat(x)]
+- `bias_sq` 是平均预测和真相之间的平方差
+- `variance` 是 bootstrap 样本之间预测的平均散布
+- `total_error` 应该约等于 bias² + variance + noise
 
 ### 第 4 步：学习曲线
 
-（Python 代码逐字保留）
+```python
+def demo_learning_curves():
+    sizes = [10, 15, 20, 30, 50, 75, 100, 150, 200, 300]
+    degree = 5
+
+    for n in sizes:
+        train_errors = []
+        test_errors = []
+        for seed in range(50):
+            x_train, y_train = generate_data(n_samples=n, seed=seed * 100)
+            w = fit_polynomial(x_train, y_train, degree)
+            train_pred = predict_polynomial(x_train, w)
+            train_mse = np.mean((train_pred - y_train) ** 2)
+            test_pred = predict_polynomial(x_test, w)
+            test_mse = np.mean((test_pred - y_test) ** 2)
+            train_errors.append(train_mse)
+            test_errors.append(test_mse)
+        # 对多次运行取平均给出学习曲线点
+```
+
+对高方差模型（次数 5、小数据），你会看到：
+- 训练误差从低开始，随着更多数据让记忆变难而升高
+- 测试误差从高开始，随着模型获得更多信号而下降
+- 差距随更多数据缩小
+
+对高偏差模型（次数 1），两条误差很快收敛到同一个高值，更多数据没用。
 
 ### 第 5 步：正则化扫描
 
 代码也包含 `demo_regularization_sweep()`，固定一个高次多项式（次数 15），扫 Ridge 正则化强度从 0.001 到 100。这从另一个角度展示偏差-方差权衡：不是变模型复杂度，而是变约束强度。
 
-（Python 代码逐字保留）
+```python
+def demo_regularization_sweep():
+    alphas = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]
+    for alpha in alphas:
+        results = bias_variance_decomposition([15], lam=alpha)
+        r = results[15]
+        print(f"alpha={alpha:.3f}  bias={r['bias_sq']:.4f}  var={r['variance']:.4f}")
+```
+
+低 alpha 时，次数 15 多项式几乎不受约束。方差主导，因为模型在每个 bootstrap 样本上追噪声。高 alpha 时，惩罚强到模型实际上变成近常数函数。偏差主导。最优 alpha 在这两个极端之间。
+
+这和变多项式次数的 U 型曲线是同一个东西，但由连续旋钮控制而不是离散旋钮。实践中，正则化是控制权衡首选方式，因为它允许精细调整而不改变特征集。
 
 ## Use It
 
@@ -236,15 +301,57 @@ sklearn 提供了 `learning_curve` 和 `validation_curve` 来自动化这些诊�
 
 ### 验证曲线：扫模型复杂度
 
-（sklearn 代码逐字保留）
+```python
+from sklearn.model_selection import validation_curve
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import Ridge
+
+degrees = list(range(1, 16))
+train_scores_all = []
+val_scores_all = []
+
+for d in degrees:
+    pipe = make_pipeline(PolynomialFeatures(d), Ridge(alpha=0.01))
+    train_scores, val_scores = validation_curve(
+        pipe, X, y, param_name="polynomialfeatures__degree",
+        param_range=[d], cv=5, scoring="neg_mean_squared_error"
+    )
+    train_scores_all.append(-train_scores.mean())
+    val_scores_all.append(-val_scores.mean())
+```
+
+直接给你偏差-方差权衡曲线。验证分数相对训练分数最差时，方差主导。两者都差时，偏差主导。
 
 ### 学习曲线：扫训练集大小
 
-（sklearn 代码逐字保留）
+```python
+from sklearn.model_selection import learning_curve
+
+pipe = make_pipeline(PolynomialFeatures(5), Ridge(alpha=0.01))
+train_sizes, train_scores, val_scores = learning_curve(
+    pipe, X, y, train_sizes=np.linspace(0.1, 1.0, 10),
+    cv=5, scoring="neg_mean_squared_error"
+)
+train_mse = -train_scores.mean(axis=1)
+val_mse = -val_scores.mean(axis=1)
+```
+
+画 `train_mse` 和 `val_mse` vs `train_sizes`。形状告诉你关于模型的一切。
 
 ### 带正则化扫描的交叉验证
 
-（sklearn 代码逐字保留）
+```python
+from sklearn.model_selection import cross_val_score
+
+alphas = [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+for alpha in alphas:
+    pipe = make_pipeline(PolynomialFeatures(10), Ridge(alpha=alpha))
+    scores = cross_val_score(pipe, X, y, cv=5, scoring="neg_mean_squared_error")
+    print(f"alpha={alpha:>7.3f}  MSE={-scores.mean():.4f} +/- {scores.std():.4f}")
+```
+
+固定模型复杂度扫正则化强度。你会看到同样的偏差-方差权衡：低 alpha 意味着高方差，高 alpha 意味着高偏差。
 
 ### 合在一起：完整诊断工作流
 

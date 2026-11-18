@@ -40,11 +40,30 @@
 
 数据泄露是测试集或未来数据的信息污染了训练。流水线能预防最常见的形式。
 
-**泄露版（错）：** （代码逐字保留）
+**泄露版（错）：**
+
+```python
+X = df.drop("target", axis=1)
+y = df["target"]
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+X_train, X_test = X_scaled[:800], X_scaled[800:]
+y_train, y_test = y[:800], y[800:]
+```
 
 Scaler 看到了测试数据。均值和标准差包含了测试样本。这抬高了准确率估计。
 
-**正确版：** （代码逐字保留）
+**正确版：**
+
+```python
+X_train, X_test = X[:800], X[800:]
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+```
 
 用流水线，你不用想这些。流水线自动处理。
 
@@ -52,7 +71,19 @@ Scaler 看到了测试数据。均值和标准差包含了测试样本。这抬�
 
 sklearn 的 `Pipeline` 把转换器和评估器串起来。暴露 `.fit()`、`.predict()` 和 `.score()`，按顺序应用所有步骤。
 
-（代码逐字保留）
+```python
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+
+pipe = Pipeline([
+    ("scaler", StandardScaler()),
+    ("model", LogisticRegression()),
+])
+
+pipe.fit(X_train, y_train)
+predictions = pipe.predict(X_test)
+```
 
 调 `pipe.fit(X_train, y_train)` 时：
 1. Scaler 在 X_train 上调用 `fit_transform`
@@ -68,7 +99,31 @@ Scaler 在拟合期间从不看测试数据。这就是全部意义。
 
 真实数据集有需要不同预处理的数值列和类别列。`ColumnTransformer` 处理这个。
 
-（代码逐字保留）
+```python
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+
+numeric_pipe = Pipeline([
+    ("impute", SimpleImputer(strategy="median")),
+    ("scale", StandardScaler()),
+])
+
+categorical_pipe = Pipeline([
+    ("impute", SimpleImputer(strategy="most_frequent")),
+    ("encode", OneHotEncoder(handle_unknown="ignore")),
+])
+
+preprocessor = ColumnTransformer([
+    ("num", numeric_pipe, ["age", "income", "score"]),
+    ("cat", categorical_pipe, ["city", "gender", "plan"]),
+])
+
+full_pipeline = Pipeline([
+    ("preprocess", preprocessor),
+    ("model", GradientBoostingClassifier()),
+])
+```
 
 OneHotEncoder 里的 `handle_unknown="ignore"` 对生产至关重要。新类别出现时（模型从没见过的城市），它产生零向量而不是崩掉。
 
@@ -76,9 +131,36 @@ OneHotEncoder 里的 `handle_unknown="ignore"` 对生产至关重要。新类别
 
 流水线让训练可复现，但你也需要追踪跨实验发生了什么：用了哪些超参数、哪个数据集版本、指标是什么、跑的是哪版代码。
 
-**MLflow** 是最常见的开源方案：（代码逐字保留）
+**MLflow** 是最常见的开源方案：
 
-**Weights & Biases (wandb)** 用托管面板提供相同功能：（代码逐字保留）
+```python
+import mlflow
+
+with mlflow.start_run():
+    mlflow.log_param("max_depth", 5)
+    mlflow.log_param("n_estimators", 100)
+    mlflow.log_param("learning_rate", 0.1)
+
+    pipe.fit(X_train, y_train)
+    accuracy = pipe.score(X_test, y_test)
+
+    mlflow.log_metric("accuracy", accuracy)
+    mlflow.sklearn.log_model(pipe, "model")
+```
+
+**Weights & Biases (wandb)** 用托管面板提供相同功能：
+
+```python
+import wandb
+
+wandb.init(project="my-pipeline")
+wandb.config.update({"max_depth": 5, "n_estimators": 100})
+
+pipe.fit(X_train, y_train)
+accuracy = pipe.score(X_test, y_test)
+
+wandb.log({"accuracy": accuracy})
+```
 
 ### 模型版本管理
 
@@ -94,7 +176,11 @@ MLflow 的 Model Registry 提供：
 
 代码用 git 版本管理。数据也应该版本管理，但 git 处理不了大文件。DVC（Data Version Control）解决这个。
 
-（DVC 命令保留）
+```
+dvc init
+dvc add data/training.csv
+git add data/training.csv.dvc data/.gitignore
+```
 
 DVC 把实际数据存在远程存储（S3、GCS、Azure），git 里留一个小 `.dvc` 文件记录哈希。当你 checkout 一个 git commit 时，`dvc checkout` 恢复当时用的精确数据。
 
@@ -109,11 +195,23 @@ DVC 把实际数据存在远程存储（S3、GCS、Azure），git 里留一个�
 3. **版本化数据**：DVC 或类似
 4. **配置文件**：所有超参数放在 config 里，不是硬编码
 
-（代码逐字保留）
+```python
+import numpy as np
+import random
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import torch
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+    except ImportError:
+        pass
+```
 
 ### 从 Notebook 到生产流水线
-
-（mermaid 图保留）
 
 典型演进：
 
@@ -147,13 +245,55 @@ f3-pipeline-flow
 
 ### 第 1 步：自定义 Transformer
 
-（代码逐字保留）
+```python
+class CustomTransformer:
+    def __init__(self):
+        self.means = None
+        self.stds = None
+
+    def fit(self, X):
+        self.means = np.mean(X, axis=0)
+        self.stds = np.std(X, axis=0)
+        self.stds[self.stds == 0] = 1.0
+        return self
+
+    def transform(self, X):
+        return (X - self.means) / self.stds
+
+    def fit_transform(self, X):
+        return self.fit(X).transform(X)
+```
 
 ### 第 2 步：从零 Pipeline
 
-（代码逐字保留）
+```python
+class PipelineFromScratch:
+    def __init__(self, steps):
+        self.steps = steps
+
+    def fit(self, X, y=None):
+        X_current = X.copy()
+        for name, step in self.steps[:-1]:
+            X_current = step.fit_transform(X_current)
+        name, model = self.steps[-1]
+        model.fit(X_current, y)
+        return self
+
+    def predict(self, X):
+        X_current = X.copy()
+        for name, step in self.steps[:-1]:
+            X_current = step.transform(X_current)
+        name, model = self.steps[-1]
+        return model.predict(X_current)
+```
 
 ### 第 3 步：带 Pipeline 的交叉验证
+
+代码演示了带流水线的交叉验证怎么预防数据泄露：scaler 在每个折的训练数据上分别拟合。
+
+### 第 4 步：用 sklearn 做完整生产流水线
+
+一个带 `ColumnTransformer`、多条预处理路径和模型的完整流水线，用正确的交叉验证和实验日志训练。
 
 代码演示了带流水线的交叉验证怎么预防数据泄露：scaler 在每个折的训练数据上分别拟合。
 

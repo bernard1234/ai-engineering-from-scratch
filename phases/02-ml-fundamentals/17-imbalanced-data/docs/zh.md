@@ -156,7 +156,23 @@ def smote(X_minority, k=5, n_synthetic=100, seed=42):
 
 ### 带类权重的逻辑回归 + 阈值调优
 
-（全部 Python 代码逐字保留）
+```python
+def smote(X_minority, k=5, n_synthetic=100, seed=42):
+    rng = np.random.RandomState(seed)
+    n_samples = len(X_minority)
+    k = min(k, n_samples - 1)
+    synthetic = []
+
+    for _ in range(n_synthetic):
+        idx = rng.randint(0, n_samples)
+        neighbors = find_k_neighbors(X_minority, idx, k)
+        neighbor_idx = neighbors[rng.randint(0, len(neighbors))]
+        t = rng.random()
+        new_point = X_minority[idx] + t * (X_minority[neighbor_idx] - X_minority[idx])
+        synthetic.append(new_point)
+
+    return np.array(synthetic)
+```
 
 ## Use It
 

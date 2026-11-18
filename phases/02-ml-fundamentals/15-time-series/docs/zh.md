@@ -185,11 +185,40 @@ def walk_forward_split(n_samples, n_splits=5, min_train=50):
 
 ### 简单自回归模型
 
-纯 AR 模型就是在滞后特征上做线性回归（代码逐字保留）。
+纯 AR 模型就是在滞后特征上做线性回归：
+
+```python
+class SimpleAR:
+    def __init__(self, n_lags=5):
+        self.n_lags = n_lags
+        self.weights = None
+        self.bias = None
+
+    def fit(self, series):
+        X, y = make_lag_features(series, self.n_lags)
+        X_b = np.column_stack([np.ones(len(X)), X])
+        theta = np.linalg.lstsq(X_b, y, rcond=None)[0]
+        self.bias = theta[0]
+        self.weights = theta[1:]
+        return self
+```
 
 ### 平稳性检验 + 自相关
 
-（代码逐字保留）
+```python
+def check_stationarity(series, window=50):
+    rolling_mean = np.array([
+        series[max(0, i - window):i].mean()
+        for i in range(1, len(series) + 1)
+    ])
+    rolling_std = np.array([
+        series[max(0, i - window):i].std()
+        for i in range(1, len(series) + 1)
+    ])
+    return rolling_mean, rolling_std
+```
+
+如果滚动均值漂移或滚动标准差变化，序列非平稳。应用差分然后再检查。
 
 ## Use It
 

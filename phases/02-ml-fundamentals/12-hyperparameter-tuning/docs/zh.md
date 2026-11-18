@@ -139,7 +139,27 @@ Hyperband 特别有效。它用 1 epoch 启动 81 个配置，保留前三分之
 
 每个外层折独立找自己的最好超参数。外层分数是泛化性能的无偏估计。
 
-sklearn 代码逐字保留。
+```python
+from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.ensemble import GradientBoostingRegressor
+
+inner_cv = GridSearchCV(
+    GradientBoostingRegressor(),
+    param_grid={
+        "learning_rate": [0.01, 0.05, 0.1],
+        "max_depth": [2, 3, 5],
+        "n_estimators": [50, 100, 200],
+    },
+    cv=5,
+    scoring="neg_mean_squared_error",
+)
+
+outer_scores = cross_val_score(
+    inner_cv, X, y, cv=5, scoring="neg_mean_squared_error"
+)
+
+print(f"Nested CV MSE: {-outer_scores.mean():.4f} +/- {outer_scores.std():.4f}")
+```
 
 这比较贵（5 外层折 × 5 内层折 × 27 网格点 = 675 次模型拟合），但给你值得信任的性能估计。用在论文报告最终结果或决策赌注高的时候。
 
@@ -176,25 +196,166 @@ k-fold-cv
 
 ### 第 1 步：从零网格搜索
 
-（Python 代码逐字保留）
+```python
+def grid_search(model_fn, param_grid, X_train, y_train, X_val, y_val):
+    keys = list(param_grid.keys())
+    values = list(param_grid.values())
+    best_score = -float("inf")
+    best_params = None
+    n_evals = 0
+
+    for combo in itertools.product(*values):
+        params = dict(zip(keys, combo))
+        model = model_fn(**params)
+        model.fit(X_train, y_train)
+        score = evaluate(model, X_val, y_val)
+        n_evals += 1
+
+        if score > best_score:
+            best_score = score
+            best_params = params
+
+    return best_params, best_score, n_evals
+```
 
 ### 第 2 步：从零随机搜索
 
-（Python 代码逐字保留）
+```python
+def random_search(model_fn, param_distributions, X_train, y_train,
+                  X_val, y_val, n_iter=50, seed=42):
+    rng = np.random.RandomState(seed)
+    best_score = -float("inf")
+    best_params = None
+
+    for _ in range(n_iter):
+        params = {k: sample(v, rng) for k, v in param_distributions.items()}
+        model = model_fn(**params)
+        model.fit(X_train, y_train)
+        score = evaluate(model, X_val, y_val)
+
+        if score > best_score:
+            best_score = score
+            best_params = params
+
+    return best_params, best_score, n_iter
+```
 
 ### 第 3 步：贝叶斯优化（简化版）
 
 核心想法：把高斯过程拟合到观测到的（超参数，分数）对上，然后用采集函数决定接下来往哪看。
 
-（Python 代码逐字保留）
+```python
+class SimpleBayesianOptimizer:
+    def __init__(self, search_space, n_initial=5):
+        self.search_space = search_space
+        self.n_initial = n_initial
+        self.X_observed = []
+        self.y_observed = []
+
+    def _kernel(self, x1, x2, length_scale=1.0):
+        dists = np.sum((x1[:, None, :] - x2[None, :, :]) ** 2, axis=2)
+        return np.exp(-0.5 * dists / length_scale ** 2)
+
+    def _fit_gp(self, X_new):
+        X_obs = np.array(self.X_observed)
+        y_obs = np.array(self.y_observed)
+        y_mean = y_obs.mean()
+        y_centered = y_obs - y_mean
+
+        K = self._kernel(X_obs, X_obs) + 1e-4 * np.eye(len(X_obs))
+        K_star = self._kernel(X_new, X_obs)
+
+        L = np.linalg.cholesky(K)
+        alpha = np.linalg.solve(L.T, np.linalg.solve(L, y_centered))
+        mu = K_star @ alpha + y_mean
+
+        v = np.linalg.solve(L, K_star.T)
+        var = 1.0 - np.sum(v ** 2, axis=0)
+        var = np.maximum(var, 1e-6)
+
+        return mu, var
+
+    def _expected_improvement(self, mu, var, best_y):
+        sigma = np.sqrt(var)
+        z = (mu - best_y) / (sigma + 1e-10)
+        ei = sigma * (z * norm_cdf(z) + norm_pdf(z))
+        return ei
+
+    def suggest(self):
+        if len(self.X_observed) < self.n_initial:
+            return sample_random(self.search_space)
+
+        candidates = [sample_random(self.search_space) for _ in range(500)]
+        X_cand = np.array([to_vector(c) for c in candidates])
+        mu, var = self._fit_gp(X_cand)
+        ei = self._expected_improvement(mu, var, max(self.y_observed))
+        return candidates[np.argmax(ei)]
+
+    def observe(self, params, score):
+        self.X_observed.append(to_vector(params))
+        self.y_observed.append(score)
+```
 
 GP 代理在每个候选点给两个东西：预测分数（μ）和不确定性（σ）。Expected Improvement 平衡两者：它偏好模型预测高分数**或**不确定性高的点。早期大部分点不确定性高，所以优化器在探索。后期它聚焦到最有前景的区域。
 
 ### 第 4 步：对比所有方法
 
-（Python 代码逐字保留）
-
 同样预算下，贝叶斯优化通常最快找到最好分数，因为它不在明显差的区域浪费评估。随机搜索比网格搜索覆盖更多地盘。网格搜索只在你有很少超参数且能穷举时才赢。
+
+```python
+def synthetic_objective(params):
+    lr = params["learning_rate"]
+    depth = params["max_depth"]
+    return -(np.log10(lr) + 2) ** 2 - (depth - 4) ** 2 + 10
+
+param_grid = {
+    "learning_rate": [0.001, 0.01, 0.1, 1.0],
+    "max_depth": [2, 3, 4, 5, 6, 7, 8],
+}
+
+grid_best = None
+grid_score = -float("inf")
+grid_history = []
+for combo in itertools.product(*param_grid.values()):
+    params = dict(zip(param_grid.keys(), combo))
+    score = synthetic_objective(params)
+    grid_history.append((params, score))
+    if score > grid_score:
+        grid_score = score
+        grid_best = params
+
+param_dist = {
+    "learning_rate": ("log_float", 0.001, 1.0),
+    "max_depth": ("int", 2, 8),
+}
+
+rand_best = None
+rand_score = -float("inf")
+rand_history = []
+rng = np.random.RandomState(42)
+for _ in range(28):
+    params = {k: sample(v, rng) for k, v in param_dist.items()}
+    score = synthetic_objective(params)
+    rand_history.append((params, score))
+    if score > rand_score:
+        rand_score = score
+        rand_best = params
+
+optimizer = SimpleBayesianOptimizer(param_dist, n_initial=5)
+bayes_history = []
+for _ in range(28):
+    params = optimizer.suggest()
+    score = synthetic_objective(params)
+    optimizer.observe(params, score)
+    bayes_history.append((params, score))
+bayes_score = max(s for _, s in bayes_history)
+
+print(f"{'Method':<20} {'Best Score':>12} {'Evaluations':>12}")
+print("-" * 50)
+print(f"{'Grid Search':<20} {grid_score:>12.4f} {len(grid_history):>12}")
+print(f"{'Random Search':<20} {rand_score:>12.4f} {len(rand_history):>12}")
+print(f"{'Bayesian Opt':<20} {bayes_score:>12.4f} {len(bayes_history):>12}")
+```
 
 ## Use It
 
@@ -202,21 +363,92 @@ GP 代理在每个候选点给两个东西：预测分数（μ）和不确定性
 
 Optuna 是严肃超参数调优推荐的库。原生支持剪枝、分布式搜索和可视化。
 
-（Optuna 代码逐字保留）
+```python
+import optuna
+
+def objective(trial):
+    lr = trial.suggest_float("learning_rate", 1e-4, 1e-1, log=True)
+    n_est = trial.suggest_int("n_estimators", 50, 500)
+    max_depth = trial.suggest_int("max_depth", 2, 10)
+
+    model = GradientBoostingRegressor(
+        learning_rate=lr,
+        n_estimators=n_est,
+        max_depth=max_depth,
+    )
+    model.fit(X_train, y_train)
+    return mean_squared_error(y_val, model.predict(X_val))
+
+study = optuna.create_study(direction="minimize")
+study.optimize(objective, n_trials=100)
+
+print(f"Best params: {study.best_params}")
+print(f"Best MSE: {study.best_value:.4f}")
+```
 
 ### 带剪枝的 Optuna
 
 剪枝提前停掉没前景的试验，省大量算力。
 
-（Optuna 剪枝代码逐字保留）
+```python
+import optuna
+from sklearn.model_selection import cross_val_score
+
+def objective(trial):
+    params = {
+        "learning_rate": trial.suggest_float("lr", 1e-4, 0.5, log=True),
+        "max_depth": trial.suggest_int("max_depth", 2, 10),
+        "n_estimators": trial.suggest_int("n_estimators", 50, 500),
+        "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+    }
+
+    model = GradientBoostingRegressor(**params)
+    scores = cross_val_score(model, X_train, y_train, cv=3,
+                             scoring="neg_mean_squared_error")
+    mean_score = -scores.mean()
+
+    trial.report(mean_score, step=0)
+    if trial.should_prune():
+        raise optuna.TrialPruned()
+
+    return mean_score
+
+pruner = optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=5)
+study = optuna.create_study(direction="minimize", pruner=pruner)
+study.optimize(objective, n_trials=200)
+```
+
+`MedianPruner` 在中间值比同一步所有已完成试验的中位数还差时停掉试验。剪枝通常省 40-60% 总算力。
 
 ### sklearn 内置调优器
 
 快速实验用 sklearn 提供 `GridSearchCV`、`RandomizedSearchCV` 和 `HalvingRandomSearchCV`：
 
-（sklearn 代码逐字保留）
+```python
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import loguniform, randint
 
-### 超参数调优的常见错误
+param_dist = {
+    "learning_rate": loguniform(1e-4, 0.5),
+    "max_depth": randint(2, 10),
+    "n_estimators": randint(50, 500),
+}
+
+search = RandomizedSearchCV(
+    GradientBoostingRegressor(),
+    param_dist,
+    n_iter=100,
+    cv=5,
+    scoring="neg_mean_squared_error",
+    random_state=42,
+    n_jobs=-1,
+)
+search.fit(X_train, y_train)
+print(f"Best params: {search.best_params_}")
+print(f"Best CV MSE: {-search.best_score_:.4f}")
+```
+
+学习率和正则化用 scipy 的 `loguniform`。整数超参数用 `randint`。`n_jobs=-1` 在所有 CPU 核上并行。
 
 **预处理导致的数据泄露。** 如果你在交叉验证之前就在整个数据集上拟合 scaler，验证折的信息泄露进训练。永远把预处理放进 `Pipeline` 里，让它只在训练折上拟合。
 

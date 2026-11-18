@@ -177,7 +177,117 @@ def rfe(X, y, n_features_to_select=5):
 
 ### L1 特征选择 + 树重要性
 
-（Python 代码逐字保留，含 soft-thresholding、Gini 不纯度、best_split、随机森林重要性聚合）
+```python
+def variance_threshold(X, threshold=0.01):
+    variances = np.var(X, axis=0)
+    mask = variances > threshold
+    return mask, variances
+```
+
+```python
+def discretize(x, n_bins=10):
+    min_val, max_val = x.min(), x.max()
+    if max_val == min_val:
+        return np.zeros_like(x, dtype=int)
+    bin_edges = np.linspace(min_val, max_val, n_bins + 1)
+    binned = np.digitize(x, bin_edges[1:-1])
+    return binned
+
+
+def mutual_information(X, y, n_bins=10):
+    n_samples, n_features = X.shape
+    mi_scores = np.zeros(n_features)
+
+    y_vals, y_counts = np.unique(y, return_counts=True)
+    p_y = y_counts / n_samples
+
+    for f in range(n_features):
+        x_binned = discretize(X[:, f], n_bins)
+        x_vals, x_counts = np.unique(x_binned, return_counts=True)
+        p_x = dict(zip(x_vals, x_counts / n_samples))
+
+        mi = 0.0
+        for xv in x_vals:
+            for yi, yv in enumerate(y_vals):
+                joint_mask = (x_binned == xv) & (y == yv)
+                p_xy = np.sum(joint_mask) / n_samples
+                if p_xy > 0:
+                    mi += p_xy * np.log(p_xy / (p_x[xv] * p_y[yi]))
+        mi_scores[f] = mi
+
+    return mi_scores
+```
+
+```python
+def simple_logistic_importance(X, y, lr=0.1, epochs=100):
+    n_samples, n_features = X.shape
+    w = np.zeros(n_features)
+    b = 0.0
+
+    for _ in range(epochs):
+        z = X @ w + b
+        pred = 1.0 / (1.0 + np.exp(-np.clip(z, -500, 500)))
+        error = pred - y
+        w -= lr * (X.T @ error) / n_samples
+        b -= lr * np.mean(error)
+
+    return w, b
+
+
+def rfe(X, y, n_features_to_select=5, lr=0.1, epochs=100):
+    n_total = X.shape[1]
+    remaining = list(range(n_total))
+    rankings = np.ones(n_total, dtype=int)
+    rank = n_total
+
+    while len(remaining) > n_features_to_select:
+        X_subset = X[:, remaining]
+        w, _ = simple_logistic_importance(X_subset, y, lr, epochs)
+        importances = np.abs(w)
+
+        least_idx = np.argmin(importances)
+        original_idx = remaining[least_idx]
+        rankings[original_idx] = rank
+        rank -= 1
+        remaining.pop(least_idx)
+
+    for idx in remaining:
+        rankings[idx] = 1
+
+    selected_mask = rankings == 1
+    return selected_mask, rankings
+```
+
+```python
+def soft_threshold(w, alpha):
+    return np.sign(w) * np.maximum(np.abs(w) - alpha, 0)
+
+
+def l1_feature_selection(X, y, alpha=0.1, lr=0.01, epochs=500):
+    n_samples, n_features = X.shape
+    w = np.zeros(n_features)
+    b = 0.0
+
+    for _ in range(epochs):
+        z = X @ w + b
+        pred = 1.0 / (1.0 + np.exp(-np.clip(z, -500, 500)))
+        error = pred - y
+
+        gradient_w = (X.T @ error) / n_samples
+        gradient_b = np.mean(error)
+
+        w -= lr * gradient_w
+        w = soft_threshold(w, lr * alpha)
+        b -= lr * gradient_b
+
+    selected_mask = np.abs(w) > 1e-6
+    return selected_mask, w
+```
+
+```python
+def gini_impurity(y):
+    if len(y) == 0:
+        return 0.0
 
 ## Use It
 

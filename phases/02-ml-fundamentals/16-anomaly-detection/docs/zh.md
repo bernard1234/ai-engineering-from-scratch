@@ -146,7 +146,52 @@ def iqr_detect(X, factor=1.5):
 
 ### 从零孤立森林
 
-（IsolationTree + IsolationForest 类代码逐字保留）
+```python
+class IsolationTree:
+    def __init__(self, max_depth):
+        self.max_depth = max_depth
+
+    def fit(self, X, depth=0):
+        n, p = X.shape
+        if depth >= self.max_depth or n <= 1:
+            self.is_leaf = True
+            self.size = n
+            return self
+        self.is_leaf = False
+        self.feature = np.random.randint(p)
+        x_min = X[:, self.feature].min()
+        x_max = X[:, self.feature].max()
+        if x_min == x_max:
+            self.is_leaf = True
+            self.size = n
+            return self
+        self.threshold = np.random.uniform(x_min, x_max)
+        left_mask = X[:, self.feature] < self.threshold
+        self.left = IsolationTree(self.max_depth).fit(X[left_mask], depth + 1)
+        self.right = IsolationTree(self.max_depth).fit(X[~left_mask], depth + 1)
+        return self
+```
+
+```python
+class IsolationForest:
+    def __init__(self, n_estimators=100, max_samples=256, seed=42):
+        self.n_estimators = n_estimators
+        self.max_samples = max_samples
+
+    def fit(self, X):
+        sample_size = min(self.max_samples, X.shape[0])
+        max_depth = int(np.ceil(np.log2(sample_size)))
+        for _ in range(self.n_estimators):
+            idx = rng.choice(X.shape[0], size=sample_size, replace=False)
+            tree = IsolationTree(max_depth=max_depth)
+            tree.fit(X[idx])
+            self.trees.append(tree)
+
+    def anomaly_score(self, X):
+        avg_path = average path length across all trees
+        scores = 2.0 ** (-avg_path / c(max_samples))
+        return scores
+```
 
 ### 演示场景
 
