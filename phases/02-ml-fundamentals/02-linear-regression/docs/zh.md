@@ -5,7 +5,7 @@
 **Type:** Build
 **Languages:** Python
 **Prerequisites:** Phase 1 (Linear Algebra, Calculus, Optimization), Phase 2 Lesson 1
-**Time:** ~90 minutes
+**Time:** \~90 minutes
 
 ## Learning Objectives
 
@@ -74,7 +74,7 @@ flowchart TD
 
 梯度告诉你两件事：每个参数应该往哪个方向走，以及走多少。
 
-对于 MSE 和 y_hat = wx + b：
+对于 MSE 和 y\_hat = wx + b：
 
 ```
 dMSE/dw = (2/n) * sum((y_hat - y) * x)
@@ -515,30 +515,31 @@ print(f"Ridge coefficient: {ridge.coef_[0]:.4f}")
 ## Ship It
 
 本课产出：
+
 - `outputs/skill-regression.md` — 根据问题选择合适回归方法的 skill
 
 ## Exercises
 
 1. 实现批量梯度下降、随机梯度下降（SGD）和小批量梯度下降。在同一数据集上比较收敛速度。哪个收敛最快？哪个的损失曲线最平滑？
 2. 从三次函数（y = ax³ + bx² + cx + d + 噪声）生成数据。拟合 1、3、10 次多项式。比较训练 R² 和测试 R²。在多少次时过拟合变得明显？
-3. 实现 Lasso 回归（L1 正则化：惩罚项 = alpha * sum(|w_i|)）。在多特征房价数据上训练。对比哪些权重变成零 vs Ridge。为什么 L1 产生稀疏解而 L2 不会？
+3. 实现 Lasso 回归（L1 正则化：惩罚项 = alpha \* sum(|w\_i|)）。在多特征房价数据上训练。对比哪些权重变成零 vs Ridge。为什么 L1 产生稀疏解而 L2 不会？
 
 ## Key Terms
 
-| 术语 | 人们常说 | 实际含义 |
-|------|----------|----------|
-| Linear regression | "Draw a line through data" | 找到权重 w 和偏置 b，最小化 wx+b 与实际 y 值之间的平方差之和 |
-| Cost function | "How bad the model is" | 把模型参数映射到单个数字来衡量预测误差的函数，优化过程试图最小化它 |
-| Mean squared error | "Average of squared errors" | (1/n) * sum of (predicted - actual)²，对大错误给予不成比例的惩罚 |
-| Gradient descent | "Walk downhill" | 用偏导数迭代地沿减小损失函数的方向调整参数 |
-| Learning rate | "Step size" | 控制每次梯度下降步骤参数变化量的标量 |
-| Normal equation | "Solve it directly" | 闭式解 w = (X^T X)^-1 X^T y，不给迭代就给出最优权重 |
-| R-squared | "How good the fit is" | 模型解释的 y 方差比例，范围从负无穷到 1.0 |
-| Feature scaling | "Make features comparable" | 把特征变换到相近范围（比如零均值、单位方差），使梯度下降收敛更快 |
-| Regularization | "Penalize complexity" | 在损失函数上加一个缩小权重的项，防止过拟合 |
-| Ridge regression | "L2 regularization" | 在 MSE 上加 lambda * sum(w_i²) 惩罚的线性回归 |
-| Polynomial regression | "Fitting curves with linear math" | 在多项式特征（x, x², x³, …）上做的线性回归，对权重仍然是线性的 |
-| Overfitting | "Memorizing training data" | 使用过于复杂的模型，把训练数据里的噪声也拟合了，新数据上失败 |
+| 术语                    | 人们常说                              | 实际含义                                                |
+| --------------------- | --------------------------------- | --------------------------------------------------- |
+| Linear regression     | "Draw a line through data"        | 找到权重 w 和偏置 b，最小化 wx+b 与实际 y 值之间的平方差之和               |
+| Cost function         | "How bad the model is"            | 把模型参数映射到单个数字来衡量预测误差的函数，优化过程试图最小化它                   |
+| Mean squared error    | "Average of squared errors"       | (1/n) \* sum of (predicted - actual)²，对大错误给予不成比例的惩罚 |
+| Gradient descent      | "Walk downhill"                   | 用偏导数迭代地沿减小损失函数的方向调整参数                               |
+| Learning rate         | "Step size"                       | 控制每次梯度下降步骤参数变化量的标量                                  |
+| Normal equation       | "Solve it directly"               | 闭式解 w = (X^T X)^-1 X^T y，不给迭代就给出最优权重                |
+| R-squared             | "How good the fit is"             | 模型解释的 y 方差比例，范围从负无穷到 1.0                            |
+| Feature scaling       | "Make features comparable"        | 把特征变换到相近范围（比如零均值、单位方差），使梯度下降收敛更快                    |
+| Regularization        | "Penalize complexity"             | 在损失函数上加一个缩小权重的项，防止过拟合                               |
+| Ridge regression      | "L2 regularization"               | 在 MSE 上加 lambda \* sum(w\_i²) 惩罚的线性回归               |
+| Polynomial regression | "Fitting curves with linear math" | 在多项式特征（x, x², x³, …）上做的线性回归，对权重仍然是线性的               |
+| Overfitting           | "Memorizing training data"        | 使用过于复杂的模型，把训练数据里的噪声也拟合了，新数据上失败                      |
 
 ## Further Reading
 
@@ -546,3 +547,4 @@ print(f"Ridge coefficient: {ridge.coef_[0]:.4f}")
 - [The Elements of Statistical Learning (ESL)](https://hastie.su.domains/ElemStatLearn/) — 免费 PDF，ISLR 更数学化的伴侣，更深入地讲了 ridge 和 lasso
 - [Stanford CS229 Lecture Notes on Linear Regression](https://cs229.stanford.edu/main_notes.pdf) — Andrew Ng 的笔记，从第一性原理推导正规方程和梯度下降
 - [scikit-learn LinearRegression documentation](https://scikit-learn.org/stable/modules/linear_model.html) — LinearRegression、Ridge、Lasso、ElasticNet 的实用参考，附代码例子
+
